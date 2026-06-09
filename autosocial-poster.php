@@ -33,6 +33,7 @@ function sasp_activate(): void {
 	require_once SASP_PLUGIN_DIR . 'includes/class-sasp-cron.php';
 	SASP_Logger::create_table();
 	SASP_Cron::schedule_events();
+	set_transient( 'sasp_setup_redirect', 1, 60 );
 }
 
 // ── Deactivation ─────────────────────────────────────────────────────────────

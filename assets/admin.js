@@ -157,4 +157,31 @@
 		});
 	});
 
+	// ── Inline help toggles ───────────────────────────────────────────────────
+
+	$('.sasp-help-toggle').on('click', function (e) {
+		e.preventDefault();
+		var target = $(this).data('target');
+		var $panel = $('#' + target);
+		var isVisible = $panel.is(':visible');
+		$panel.toggle(150);
+		// Update arrow glyph.
+		var txt = $(this).text();
+		$(this).text(
+			isVisible
+				? txt.replace('▴', '▾')
+				: txt.replace('▾', '▴')
+		);
+	});
+
+	// ── Dismiss setup checklist ───────────────────────────────────────────────
+
+	$('#sasp-dismiss-checklist').on('click', function () {
+		$.post(sasp_ajax.ajax_url, {
+			action: 'sasp_dismiss_checklist',
+			nonce:  sasp_ajax.nonce
+		});
+		$('#sasp-checklist').slideUp(200);
+	});
+
 }(jQuery));

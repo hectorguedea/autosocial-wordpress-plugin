@@ -18,11 +18,15 @@ class SASP_Admin {
 		add_action( 'admin_notices', [ __CLASS__, 'token_expiry_notice' ] );
 
 		// AJAX handlers.
-		add_action( 'wp_ajax_sasp_test_facebook',  [ __CLASS__, 'ajax_test_facebook' ] );
-		add_action( 'wp_ajax_sasp_test_instagram', [ __CLASS__, 'ajax_test_instagram' ] );
-		add_action( 'wp_ajax_sasp_post_now',       [ __CLASS__, 'ajax_post_now' ] );
-		add_action( 'wp_ajax_sasp_reset_history',  [ __CLASS__, 'ajax_reset_history' ] );
-		add_action( 'wp_ajax_sasp_clear_logs',     [ __CLASS__, 'ajax_clear_logs' ] );
+		add_action( 'wp_ajax_sasp_test_facebook',      [ __CLASS__, 'ajax_test_facebook' ] );
+		add_action( 'wp_ajax_sasp_test_instagram',     [ __CLASS__, 'ajax_test_instagram' ] );
+		add_action( 'wp_ajax_sasp_post_now',           [ __CLASS__, 'ajax_post_now' ] );
+		add_action( 'wp_ajax_sasp_reset_history',      [ __CLASS__, 'ajax_reset_history' ] );
+		add_action( 'wp_ajax_sasp_clear_logs',         [ __CLASS__, 'ajax_clear_logs' ] );
+		add_action( 'wp_ajax_sasp_dismiss_checklist',  [ __CLASS__, 'ajax_dismiss_checklist' ] );
+
+		// First-run redirect to setup guide.
+		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_to_guide' ] );
 	}
 
 	// ── Menu ──────────────────────────────────────────────────────────────────
@@ -46,6 +50,15 @@ class SASP_Admin {
 			'manage_options',
 			'sasp-logs',
 			[ __CLASS__, 'render_logs_page' ]
+		);
+
+		add_submenu_page(
+			$parent,
+			__( 'AutoSocial Poster — Setup Guide', 'sasp' ),
+			__( 'Setup Guide', 'sasp' ),
+			'manage_options',
+			'sasp-guide',
+			[ __CLASS__, 'render_guide_page' ]
 		);
 	}
 
@@ -85,9 +98,11 @@ class SASP_Admin {
 		if ( ! empty( $input['fb_access_token_clear'] ) ) {
 			$clean['fb_access_token'] = '';
 			delete_option( 'sasp_fb_token_set_at' );
+			delete_option( 'sasp_fb_tested' );
 		} elseif ( '' !== $new_fb_raw ) {
 			$clean['fb_access_token'] = SASP_Crypto::encrypt( $new_fb_raw );
 			update_option( 'sasp_fb_token_set_at', time(), false );
+			delete_option( 'sasp_fb_tested' ); // must re-test new token
 		} else {
 			$clean['fb_access_token'] = $old['fb_access_token'] ?? ''; // keep existing
 		}
@@ -97,9 +112,11 @@ class SASP_Admin {
 		if ( ! empty( $input['ig_access_token_clear'] ) ) {
 			$clean['ig_access_token'] = '';
 			delete_option( 'sasp_ig_token_set_at' );
+			delete_option( 'sasp_ig_tested' );
 		} elseif ( '' !== $new_ig_raw ) {
 			$clean['ig_access_token'] = SASP_Crypto::encrypt( $new_ig_raw );
 			update_option( 'sasp_ig_token_set_at', time(), false );
+			delete_option( 'sasp_ig_tested' );
 		} else {
 			$clean['ig_access_token'] = $old['ig_access_token'] ?? ''; // keep existing
 		}
@@ -280,10 +297,12 @@ class SASP_Admin {
 			<form method="post" action="options.php">
 				<?php settings_fields( 'sasp_settings_group' ); ?>
 
+				<?php self::render_setup_checklist(); ?>
+
 				<div class="sasp-grid">
 
 					<!-- General -->
-					<div class="sasp-card">
+					<div class="sasp-card" id="sasp-card-general">
 						<h2><?php esc_html_e( 'General', 'sasp' ); ?></h2>
 						<table class="form-table sasp-form-table">
 							<tr>
@@ -347,7 +366,7 @@ class SASP_Admin {
 					</div>
 
 					<!-- Facebook credentials -->
-					<div class="sasp-card">
+					<div class="sasp-card" id="sasp-card-facebook">
 						<h2><?php esc_html_e( 'Facebook', 'sasp' ); ?></h2>
 						<?php if ( '' !== $fb_token_info['label'] ) : ?>
 							<p class="sasp-token-age sasp-token-age-<?php echo esc_attr( $fb_token_info['level'] ); ?>">
@@ -361,6 +380,17 @@ class SASP_Admin {
 									<input type="text" name="sasp_settings[fb_page_id]"
 										value="<?php echo esc_attr( $settings['fb_page_id'] ?? '' ); ?>"
 										class="regular-text" placeholder="123456789012345">
+									<a href="#" class="sasp-help-toggle" data-target="sasp-help-fb-page-id"><?php esc_html_e( 'How to find it ▾', 'sasp' ); ?></a>
+									<div id="sasp-help-fb-page-id" class="sasp-help-panel" hidden>
+										<strong><?php esc_html_e( 'Option A — from your Facebook Page:', 'sasp' ); ?></strong>
+										<ol>
+											<li><?php esc_html_e( 'Go to your Facebook Page.', 'sasp' ); ?></li>
+											<li><?php esc_html_e( 'Click "About" in the left sidebar.', 'sasp' ); ?></li>
+											<li><?php esc_html_e( 'Scroll down — the Page ID is in a grey box at the bottom.', 'sasp' ); ?></li>
+										</ol>
+										<strong><?php esc_html_e( 'Option B — Graph API Explorer:', 'sasp' ); ?></strong>
+										<p><?php esc_html_e( 'Run', 'sasp' ); ?> <code>me?fields=id,name</code> <?php esc_html_e( 'with your Page token. The "id" field is your Page ID.', 'sasp' ); ?></p>
+									</div>
 								</td>
 							</tr>
 							<tr>
@@ -383,6 +413,17 @@ class SASP_Admin {
 									<p class="description">
 										<?php esc_html_e( 'Stored encrypted. Paste a new value to replace; leave blank to keep the existing token.', 'sasp' ); ?>
 									</p>
+									<a href="#" class="sasp-help-toggle" data-target="sasp-help-fb-token"><?php esc_html_e( 'How to get a token ▾', 'sasp' ); ?></a>
+									<div id="sasp-help-fb-token" class="sasp-help-panel" hidden>
+										<ol>
+											<li><?php printf( wp_kses( __( 'Go to <a href="%s" target="_blank" rel="noopener">Graph API Explorer</a>.', 'sasp' ), [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ] ), 'https://developers.facebook.com/tools/explorer' ); ?></li>
+											<li><?php esc_html_e( 'Select your Meta App → click "Generate Access Token".', 'sasp' ); ?></li>
+											<li><?php esc_html_e( 'Approve permissions: pages_manage_posts, pages_read_engagement, pages_show_list.', 'sasp' ); ?></li>
+											<li><?php esc_html_e( 'Switch from "User Token" to your Page in the token dropdown.', 'sasp' ); ?></li>
+											<li><?php printf( wp_kses( __( 'Extend the token to 60 days in the <a href="%s" target="_blank" rel="noopener">Token Debugger</a>.', 'sasp' ), [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ] ), 'https://developers.facebook.com/tools/debug/accesstoken' ); ?></li>
+										</ol>
+										<?php printf( wp_kses( __( 'Full walkthrough: <a href="%s">Setup Guide →</a>', 'sasp' ), [ 'a' => [ 'href' => [] ] ] ), esc_url( admin_url( 'admin.php?page=sasp-guide' ) ) ); ?>
+									</div>
 								</td>
 							</tr>
 						</table>
@@ -395,7 +436,7 @@ class SASP_Admin {
 					</div>
 
 					<!-- Instagram credentials -->
-					<div class="sasp-card">
+					<div class="sasp-card" id="sasp-card-instagram">
 						<h2><?php esc_html_e( 'Instagram', 'sasp' ); ?></h2>
 						<?php if ( '' !== $ig_token_info['label'] ) : ?>
 							<p class="sasp-token-age sasp-token-age-<?php echo esc_attr( $ig_token_info['level'] ); ?>">
@@ -409,6 +450,17 @@ class SASP_Admin {
 									<input type="text" name="sasp_settings[ig_user_id]"
 										value="<?php echo esc_attr( $settings['ig_user_id'] ?? '' ); ?>"
 										class="regular-text" placeholder="123456789012345">
+									<a href="#" class="sasp-help-toggle" data-target="sasp-help-ig-id"><?php esc_html_e( 'How to find it ▾', 'sasp' ); ?></a>
+									<div id="sasp-help-ig-id" class="sasp-help-panel" hidden>
+										<ol>
+											<li><?php esc_html_e( 'Make sure your Instagram account is a Business or Creator account and is connected to your Facebook Page.', 'sasp' ); ?></li>
+											<li><?php printf( wp_kses( __( 'In <a href="%s" target="_blank" rel="noopener">Graph API Explorer</a>, with your Facebook Page Token selected, run:', 'sasp' ), [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ] ), 'https://developers.facebook.com/tools/explorer' ); ?>
+												<br><code>YOUR_PAGE_ID?fields=instagram_business_account</code>
+											</li>
+											<li><?php esc_html_e( 'Copy the "id" value inside "instagram_business_account" — that is your Instagram Business Account ID.', 'sasp' ); ?></li>
+										</ol>
+										<?php printf( wp_kses( __( 'Full walkthrough: <a href="%s">Setup Guide →</a>', 'sasp' ), [ 'a' => [ 'href' => [] ] ] ), esc_url( admin_url( 'admin.php?page=sasp-guide#guide-instagram' ) ) ); ?>
+									</div>
 								</td>
 							</tr>
 							<tr>
@@ -650,12 +702,18 @@ class SASP_Admin {
 	public static function ajax_test_facebook(): void {
 		self::verify_ajax();
 		$result = SASP_Meta_API::test_facebook_connection();
+		if ( $result['success'] ) {
+			update_option( 'sasp_fb_tested', 1, false );
+		}
 		$result['success'] ? wp_send_json_success( $result['message'] ) : wp_send_json_error( $result['message'] );
 	}
 
 	public static function ajax_test_instagram(): void {
 		self::verify_ajax();
 		$result = SASP_Meta_API::test_instagram_connection();
+		if ( $result['success'] ) {
+			update_option( 'sasp_ig_tested', 1, false );
+		}
 		$result['success'] ? wp_send_json_success( $result['message'] ) : wp_send_json_error( $result['message'] );
 	}
 
@@ -707,6 +765,404 @@ class SASP_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( 'Unauthorized', 403 );
 		}
+	}
+
+	// ── First-run redirect ────────────────────────────────────────────────────
+
+	public static function maybe_redirect_to_guide(): void {
+		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! get_transient( 'sasp_setup_redirect' ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification
+		$current_page = sanitize_key( $_GET['page'] ?? '' );
+		if ( str_starts_with( $current_page, 'sasp-' ) ) {
+			return;
+		}
+		delete_transient( 'sasp_setup_redirect' );
+		wp_safe_redirect( admin_url( 'admin.php?page=sasp-guide' ) );
+		exit;
+	}
+
+	// ── Setup checklist ───────────────────────────────────────────────────────
+
+	private static function get_setup_status(): array {
+		$s = get_option( 'sasp_settings', [] );
+		return [
+			'fb_configured' => ! empty( $s['fb_page_id'] ) && ! empty( $s['fb_access_token'] ),
+			'fb_tested'     => (bool) get_option( 'sasp_fb_tested', 0 ),
+			'ig_configured' => ! empty( $s['ig_user_id'] ),
+			'ig_tested'     => (bool) get_option( 'sasp_ig_tested', 0 ),
+			'platform_on'   => ! empty( $s['enable_facebook'] ) || ! empty( $s['enable_instagram'] ),
+			'autopost_on'   => ! empty( $s['enabled'] ),
+		];
+	}
+
+	private static function render_setup_checklist(): void {
+		$user_id = get_current_user_id();
+		if ( get_user_meta( $user_id, 'sasp_checklist_dismissed', true ) ) {
+			return;
+		}
+
+		$st = self::get_setup_status();
+		$all_done = $st['fb_configured'] && $st['fb_tested'] && $st['platform_on'] && $st['autopost_on'];
+		if ( $all_done ) {
+			return;
+		}
+
+		$guide_url = esc_url( admin_url( 'admin.php?page=sasp-guide' ) );
+		$items     = [
+			[
+				'done'  => true,
+				'label' => __( 'Plugin installed and active', 'sasp' ),
+			],
+			[
+				'done'   => $st['fb_configured'],
+				'label'  => __( 'Facebook Page ID & Access Token entered', 'sasp' ),
+				'anchor' => '#sasp-card-facebook',
+			],
+			[
+				'done'   => $st['fb_tested'],
+				'label'  => __( 'Facebook connection tested successfully', 'sasp' ),
+				'anchor' => '#sasp-card-facebook',
+			],
+			[
+				'done'     => $st['ig_configured'],
+				'label'    => __( 'Instagram Business Account ID entered', 'sasp' ),
+				'anchor'   => '#sasp-card-instagram',
+				'optional' => true,
+			],
+			[
+				'done'   => $st['platform_on'],
+				'label'  => __( 'At least one platform enabled (Facebook or Instagram)', 'sasp' ),
+				'anchor' => '#sasp-card-general',
+			],
+			[
+				'done'   => $st['autopost_on'],
+				'label'  => __( 'Auto-posting turned ON', 'sasp' ),
+				'anchor' => '#sasp-card-general',
+			],
+		];
+		?>
+		<div class="sasp-checklist" id="sasp-checklist">
+			<div class="sasp-checklist-header">
+				<span class="sasp-checklist-title">
+					<span class="dashicons dashicons-yes-alt"></span>
+					<?php esc_html_e( 'Setup Checklist', 'sasp' ); ?>
+				</span>
+				<span class="sasp-checklist-actions">
+					<a href="<?php echo $guide_url; ?>" class="button button-small">
+						<?php esc_html_e( 'Full Setup Guide →', 'sasp' ); ?>
+					</a>
+					<button type="button" id="sasp-dismiss-checklist" class="button button-small">
+						<?php esc_html_e( 'Hide', 'sasp' ); ?>
+					</button>
+				</span>
+			</div>
+			<ul class="sasp-checklist-items">
+				<?php foreach ( $items as $item ) : ?>
+					<li class="sasp-check-item <?php echo $item['done'] ? 'sasp-check-done' : 'sasp-check-todo'; ?> <?php echo ! empty( $item['optional'] ) ? 'sasp-check-optional' : ''; ?>">
+						<span class="sasp-check-icon"><?php echo $item['done'] ? '✅' : '⬜'; ?></span>
+						<span class="sasp-check-label">
+							<?php if ( ! $item['done'] && ! empty( $item['anchor'] ) ) : ?>
+								<a href="<?php echo esc_attr( $item['anchor'] ); ?>"><?php echo esc_html( $item['label'] ); ?></a>
+							<?php else : ?>
+								<?php echo esc_html( $item['label'] ); ?>
+							<?php endif; ?>
+							<?php if ( ! empty( $item['optional'] ) ) : ?>
+								<span class="sasp-optional-badge"><?php esc_html_e( 'optional', 'sasp' ); ?></span>
+							<?php endif; ?>
+						</span>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+			<p class="sasp-checklist-footer">
+				<?php printf(
+					wp_kses(
+						__( 'First time? Read the <a href="%s">Setup Guide</a> for step-by-step instructions on getting your Facebook and Instagram tokens from Meta.', 'sasp' ),
+						[ 'a' => [ 'href' => [] ] ]
+					),
+					$guide_url
+				); ?>
+			</p>
+		</div>
+		<?php
+	}
+
+	public static function ajax_dismiss_checklist(): void {
+		check_ajax_referer( 'sasp_ajax_nonce', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( 'Unauthorized', 403 );
+		}
+		update_user_meta( get_current_user_id(), 'sasp_checklist_dismissed', 1 );
+		wp_send_json_success();
+	}
+
+	// ── Setup Guide page ──────────────────────────────────────────────────────
+
+	public static function render_guide_page(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'sasp' ) );
+		}
+		$settings_url = esc_url( admin_url( 'admin.php?page=sasp-settings' ) );
+		$allowed_a    = [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ];
+		?>
+		<div class="wrap sasp-wrap sasp-guide-page">
+			<h1 class="sasp-page-title">
+				<span class="dashicons dashicons-clipboard"></span>
+				<?php esc_html_e( 'Setup Guide', 'sasp' ); ?>
+			</h1>
+			<p class="sasp-guide-intro">
+				<?php esc_html_e( 'Follow these steps to connect AutoSocial Poster to your Facebook Page and Instagram Business account via the Meta Graph API.', 'sasp' ); ?>
+				<?php printf(
+					wp_kses( __( 'Once done, go to <a href="%s">Settings</a> to enter your credentials and enable auto-posting.', 'sasp' ), $allowed_a ),
+					$settings_url
+				); ?>
+			</p>
+
+			<div class="sasp-guide-requirements">
+				<h3><?php esc_html_e( 'Before you begin', 'sasp' ); ?></h3>
+				<ul>
+					<li><?php esc_html_e( '✅ A Facebook Page for your store (not a personal profile)', 'sasp' ); ?></li>
+					<li><?php esc_html_e( '✅ Admin access to that Facebook Page', 'sasp' ); ?></li>
+					<li><?php esc_html_e( '✅ A Meta Developer account — free, sign up at developers.facebook.com', 'sasp' ); ?></li>
+					<li><?php esc_html_e( '☑ An Instagram Business or Creator account connected to your Facebook Page (only needed if you want to post to Instagram)', 'sasp' ); ?></li>
+				</ul>
+			</div>
+
+			<div class="sasp-guide-toc">
+				<a href="#guide-facebook"><?php esc_html_e( 'Part 1: Facebook', 'sasp' ); ?></a>
+				<span>·</span>
+				<a href="#guide-instagram"><?php esc_html_e( 'Part 2: Instagram', 'sasp' ); ?></a>
+				<span>·</span>
+				<a href="#guide-renewal"><?php esc_html_e( 'Part 3: Token Renewal', 'sasp' ); ?></a>
+			</div>
+
+			<!-- ── Part 1: Facebook ─────────────────────────────────────────── -->
+			<div class="sasp-guide-section" id="guide-facebook">
+				<h2><?php esc_html_e( 'Part 1: Facebook Setup', 'sasp' ); ?></h2>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">1</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Register as a Meta Developer', 'sasp' ); ?></h3>
+						<ol>
+							<li><?php printf(
+								wp_kses( __( 'Go to <a href="%s" target="_blank" rel="noopener">developers.facebook.com</a> and log in with the Facebook account that manages your Page.', 'sasp' ), $allowed_a ),
+								'https://developers.facebook.com'
+							); ?></li>
+							<li><?php esc_html_e( 'Click "Get Started" and complete the developer registration (free, takes about 1 minute).', 'sasp' ); ?></li>
+						</ol>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">2</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Create a Meta App', 'sasp' ); ?></h3>
+						<ol>
+							<li><?php esc_html_e( 'In the developer dashboard, click "My Apps" → "Create App".', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Select "Other" as the use case, then "Business" as the app type.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Enter an app name (e.g. "My Store Social Poster") and your contact email, then click "Create App".', 'sasp' ); ?></li>
+						</ol>
+						<div class="sasp-guide-note">
+							<?php esc_html_e( 'You only create the app once. You can reuse it every time you need to renew your token.', 'sasp' ); ?>
+						</div>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">3</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Get a Page Access Token via Graph API Explorer', 'sasp' ); ?></h3>
+						<ol>
+							<li><?php printf(
+								wp_kses( __( 'Go to the <a href="%s" target="_blank" rel="noopener">Graph API Explorer</a>.', 'sasp' ), $allowed_a ),
+								'https://developers.facebook.com/tools/explorer'
+							); ?></li>
+							<li><?php esc_html_e( 'In the "Meta App" dropdown (top right), select the app you just created.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Click the blue "Generate Access Token" button.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'A permissions dialog appears. Make sure to add these three permissions:', 'sasp' ); ?>
+								<ul class="sasp-perm-list">
+									<li><code>pages_manage_posts</code> — <?php esc_html_e( 'publish posts to your page', 'sasp' ); ?></li>
+									<li><code>pages_read_engagement</code> — <?php esc_html_e( 'read page details', 'sasp' ); ?></li>
+									<li><code>pages_show_list</code> — <?php esc_html_e( 'list your pages', 'sasp' ); ?></li>
+								</ul>
+							</li>
+							<li><?php esc_html_e( 'Click "Generate Access Token", log in with your Facebook account, and approve the permissions.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'You now have a short-lived User Token. In the token field at the top of the Explorer, click the dropdown and switch from "User Token" to your Page name.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Copy the token shown — this is your Page Access Token.', 'sasp' ); ?></li>
+						</ol>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">4</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Extend to a Long-Lived Token (~60 days)', 'sasp' ); ?></h3>
+						<p><?php esc_html_e( 'Page tokens from the Explorer expire in about 1 hour. Extend them to ~60 days before saving.', 'sasp' ); ?></p>
+						<ol>
+							<li><?php printf(
+								wp_kses( __( 'Go to the <a href="%s" target="_blank" rel="noopener">Access Token Debugger</a>.', 'sasp' ), $allowed_a ),
+								'https://developers.facebook.com/tools/debug/accesstoken'
+							); ?></li>
+							<li><?php esc_html_e( 'Paste your token and click "Debug".', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Scroll to the bottom of the page and click "Extend Access Token".', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Copy the extended token — this is your Long-Lived Page Access Token.', 'sasp' ); ?></li>
+						</ol>
+						<div class="sasp-guide-warning">
+							<?php esc_html_e( '⚠ This token expires in ~60 days. The plugin warns you at 53 days. You must repeat steps 3–4 to renew it.', 'sasp' ); ?>
+						</div>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">5</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Find your Facebook Page ID', 'sasp' ); ?></h3>
+						<p><strong><?php esc_html_e( 'Option A — from your Facebook Page:', 'sasp' ); ?></strong></p>
+						<ol>
+							<li><?php esc_html_e( 'Go to your Facebook Page → click "About" in the left sidebar.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Scroll down — the Page ID is displayed in a grey box.', 'sasp' ); ?></li>
+						</ol>
+						<p><strong><?php esc_html_e( 'Option B — Graph API Explorer:', 'sasp' ); ?></strong></p>
+						<ol>
+							<li><?php esc_html_e( 'With your Page Token selected in the Explorer, type:', 'sasp' ); ?>
+								<pre class="sasp-code-block">me?fields=id,name</pre>
+							</li>
+							<li><?php esc_html_e( 'Click ▶. The "id" value is your Page ID.', 'sasp' ); ?></li>
+						</ol>
+					</div>
+				</div>
+
+				<div class="sasp-step-card sasp-step-card-action">
+					<div class="sasp-step-num sasp-step-num-done">✓</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Enter credentials in the plugin', 'sasp' ); ?></h3>
+						<p><?php printf(
+							wp_kses( __( 'Go to <a href="%s">Settings → Facebook card</a>, fill in your <strong>Page ID</strong> and long-lived <strong>Page Access Token</strong>, then click "Test Facebook Connection".', 'sasp' ), array_merge( $allowed_a, [ 'strong' => [] ] ) ),
+							$settings_url
+						); ?></p>
+					</div>
+				</div>
+			</div>
+
+			<!-- ── Part 2: Instagram ─────────────────────────────────────────── -->
+			<div class="sasp-guide-section" id="guide-instagram">
+				<h2><?php esc_html_e( 'Part 2: Instagram Setup (optional)', 'sasp' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Skip this section if you only want to post to Facebook.', 'sasp' ); ?></p>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">1</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Switch to a Business or Creator Account', 'sasp' ); ?></h3>
+						<p><?php esc_html_e( 'The Meta API only works with Business or Creator accounts — personal accounts are not supported.', 'sasp' ); ?></p>
+						<ol>
+							<li><?php esc_html_e( 'In the Instagram app: go to your profile → tap ≡ → Settings and privacy → Account type and tools.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Tap "Switch to Professional Account" → choose "Business".', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Follow the prompts to complete the business profile setup.', 'sasp' ); ?></li>
+						</ol>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">2</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Connect Instagram to your Facebook Page', 'sasp' ); ?></h3>
+						<p><?php esc_html_e( 'Instagram must be linked to the same Facebook Page you set up in Part 1.', 'sasp' ); ?></p>
+						<p><strong><?php esc_html_e( 'From Instagram:', 'sasp' ); ?></strong></p>
+						<ol>
+							<li><?php esc_html_e( 'Profile → Edit Profile → scroll to "Page" → Connect or create a Facebook Page.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Select your store\'s Facebook Page and confirm.', 'sasp' ); ?></li>
+						</ol>
+						<p><strong><?php esc_html_e( 'From Facebook:', 'sasp' ); ?></strong></p>
+						<ol>
+							<li><?php esc_html_e( 'Go to your Facebook Page → Settings → Instagram.', 'sasp' ); ?></li>
+							<li><?php esc_html_e( 'Click "Connect Account" and log in with your Instagram credentials.', 'sasp' ); ?></li>
+						</ol>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">3</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Find your Instagram Business Account ID', 'sasp' ); ?></h3>
+						<ol>
+							<li><?php printf(
+								wp_kses( __( 'In <a href="%s" target="_blank" rel="noopener">Graph API Explorer</a>, with your Facebook Page Access Token selected, enter:', 'sasp' ), $allowed_a ),
+								'https://developers.facebook.com/tools/explorer'
+							); ?>
+								<pre class="sasp-code-block">YOUR_PAGE_ID?fields=instagram_business_account</pre>
+							</li>
+							<li><?php esc_html_e( 'Click ▶. You\'ll see a response like:', 'sasp' ); ?>
+								<pre class="sasp-code-block">{
+  "instagram_business_account": {
+    "id": "17841400000000000"
+  },
+  "id": "123456789012345"
+}</pre>
+							</li>
+							<li><?php esc_html_e( 'Copy the "id" value inside "instagram_business_account" — that is your Instagram Business Account ID.', 'sasp' ); ?></li>
+						</ol>
+						<div class="sasp-guide-note">
+							<?php esc_html_e( 'If the "instagram_business_account" key is missing from the response, Instagram is not yet connected to your Facebook Page. Go back to Step 2.', 'sasp' ); ?>
+						</div>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num">4</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Token for Instagram', 'sasp' ); ?></h3>
+						<p><?php esc_html_e( 'You do not need a separate Instagram token. The plugin uses the same Facebook Page Access Token for both platforms.', 'sasp' ); ?></p>
+						<p><?php printf(
+							wp_kses( __( 'In <a href="%s">Settings → Instagram card</a>: enter the Instagram Business Account ID. Leave the Token field blank — the Facebook token will be used automatically.', 'sasp' ), $allowed_a ),
+							$settings_url
+						); ?></p>
+					</div>
+				</div>
+
+				<div class="sasp-step-card sasp-step-card-action">
+					<div class="sasp-step-num sasp-step-num-done">✓</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'Test the Instagram connection', 'sasp' ); ?></h3>
+						<p><?php printf(
+							wp_kses( __( 'Go to <a href="%s">Settings → Instagram card</a> and click "Test Instagram Connection".', 'sasp' ), $allowed_a ),
+							$settings_url
+						); ?></p>
+					</div>
+				</div>
+			</div>
+
+			<!-- ── Part 3: Token Renewal ─────────────────────────────────────── -->
+			<div class="sasp-guide-section" id="guide-renewal">
+				<h2><?php esc_html_e( 'Part 3: Token Renewal', 'sasp' ); ?></h2>
+				<div class="sasp-guide-warning">
+					<?php esc_html_e( 'Meta Page Access Tokens expire in ~60 days. This is a Meta platform limitation and cannot be changed. You must renew before expiry or posts will fail.', 'sasp' ); ?>
+				</div>
+				<p><?php esc_html_e( 'The plugin shows a warning in the WordPress admin when your token is 53+ days old. When you see it:', 'sasp' ); ?></p>
+				<ol>
+					<li><?php esc_html_e( 'Repeat Steps 3–4 from Part 1 (Graph API Explorer + Token Debugger) to get a new long-lived token.', 'sasp' ); ?></li>
+					<li><?php printf(
+						wp_kses( __( 'Go to <a href="%s">Settings → Facebook card</a> → paste the new token → Save Settings.', 'sasp' ), $allowed_a ),
+						$settings_url
+					); ?></li>
+					<li><?php esc_html_e( 'Click "Test Facebook Connection" to confirm it works.', 'sasp' ); ?></li>
+				</ol>
+				<div class="sasp-guide-note">
+					<?php esc_html_e( 'Pro tip: set a calendar reminder for 55 days after saving a new token so you never miss a renewal deadline.', 'sasp' ); ?>
+				</div>
+			</div>
+
+			<div class="sasp-guide-footer">
+				<a href="<?php echo $settings_url; ?>" class="button button-primary">
+					<?php esc_html_e( '← Back to Settings', 'sasp' ); ?>
+				</a>
+			</div>
+		</div>
+		<?php
 	}
 
 	/**
