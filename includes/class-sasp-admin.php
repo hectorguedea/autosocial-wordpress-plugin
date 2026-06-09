@@ -214,8 +214,10 @@ class SASP_Admin {
 		if ( false === strpos( $hook, 'sasp' ) ) {
 			return;
 		}
-		wp_enqueue_style( 'sasp-admin', SASP_PLUGIN_URL . 'assets/admin.css', [], SASP_VERSION );
-		wp_enqueue_script( 'sasp-admin', SASP_PLUGIN_URL . 'assets/admin.js', [ 'jquery' ], SASP_VERSION, true );
+		$css_ver = SASP_VERSION . '.' . filemtime( SASP_PLUGIN_DIR . 'assets/admin.css' );
+		$js_ver  = SASP_VERSION . '.' . filemtime( SASP_PLUGIN_DIR . 'assets/admin.js' );
+		wp_enqueue_style( 'sasp-admin', SASP_PLUGIN_URL . 'assets/admin.css', [], $css_ver );
+		wp_enqueue_script( 'sasp-admin', SASP_PLUGIN_URL . 'assets/admin.js', [ 'jquery' ], $js_ver, true );
 		wp_localize_script( 'sasp-admin', 'sasp_ajax', [
 			'ajax_url' => admin_url( 'admin-ajax.php' ),
 			'nonce'    => wp_create_nonce( 'sasp_ajax_nonce' ),

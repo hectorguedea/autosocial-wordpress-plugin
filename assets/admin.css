@@ -421,11 +421,11 @@
 /* ── Onboarding checklist ───────────────────────────────────────────────── */
 
 .sasp-onboard {
-	background: linear-gradient(135deg, #1d2327 0%, #2c3338 100%);
+	background: linear-gradient(135deg, #1d2327 0%, #2c3338 100%) !important;
 	border-radius: 8px;
 	padding: 20px 24px;
 	margin-bottom: 24px;
-	color: #fff;
+	color: #fff !important;
 	box-shadow: 0 4px 12px rgba(0,0,0,.15);
 }
 
@@ -451,12 +451,12 @@
 	display: block;
 	font-size: 16px;
 	font-weight: 700;
-	color: #fff;
+	color: #fff !important;
 }
 
 .sasp-onboard-subtitle {
 	font-size: 12px;
-	color: #a7aaad;
+	color: #a7aaad !important;
 	margin-top: 2px;
 }
 
@@ -528,7 +528,7 @@
 .sasp-progress-pct {
 	font-size: 12px;
 	font-weight: 700;
-	color: rgba(255,255,255,.8);
+	color: rgba(255,255,255,.8) !important;
 	flex-shrink: 0;
 	min-width: 32px;
 	text-align: right;
@@ -596,13 +596,13 @@
 
 .sasp-onboard-step-label {
 	flex: 1;
-	color: rgba(255,255,255,.9);
+	color: rgba(255,255,255,.9) !important;
 	font-size: 12px;
 	line-height: 1.4;
 }
 
 .sasp-step-done .sasp-onboard-step-label {
-	color: rgba(255,255,255,.6);
+	color: rgba(255,255,255,.5) !important;
 	text-decoration: line-through;
 	text-decoration-color: rgba(255,255,255,.3);
 }
@@ -692,7 +692,7 @@
 
 /* Hero */
 .sasp-guide-hero {
-	background: linear-gradient(135deg, #1d2327 0%, #2c3338 100%);
+	background: linear-gradient(135deg, #1d2327 0%, #2c3338 100%) !important;
 	border-radius: 8px;
 	padding: 28px 32px;
 	margin-bottom: 24px;
@@ -700,14 +700,14 @@
 	justify-content: space-between;
 	align-items: center;
 	gap: 24px;
-	color: #fff;
+	color: #fff !important;
 	box-shadow: 0 4px 12px rgba(0,0,0,.15);
 }
 
 .sasp-guide-hero h1 {
-	margin: 0 0 8px;
-	font-size: 22px;
-	color: #fff;
+	margin: 0 0 8px !important;
+	font-size: 22px !important;
+	color: #fff !important;
 	display: flex;
 	align-items: center;
 	gap: 10px;
@@ -717,13 +717,13 @@
 	font-size: 26px;
 	width: 26px;
 	height: 26px;
-	color: #72aee6;
+	color: #72aee6 !important;
 }
 
 .sasp-guide-hero p {
-	margin: 0 0 16px;
-	color: rgba(255,255,255,.7);
-	font-size: 14px;
+	margin: 0 0 16px !important;
+	color: rgba(255,255,255,.75) !important;
+	font-size: 14px !important;
 }
 
 .sasp-guide-flow {
@@ -740,11 +740,11 @@
 	padding: 4px 12px;
 	font-size: 12px;
 	font-weight: 600;
-	color: #fff;
+	color: #fff !important;
 }
 
 .sasp-flow-arrow {
-	color: rgba(255,255,255,.4);
+	color: rgba(255,255,255,.5) !important;
 	font-size: 14px;
 }
 
@@ -890,39 +890,42 @@
 }
 
 .sasp-section-fb {
-	background: linear-gradient(135deg, #1877f2, #1558d0);
-	color: #fff;
+	background: linear-gradient(135deg, #1877f2, #1558d0) !important;
+	color: #fff !important;
 	border-radius: 8px;
 	margin-bottom: 16px;
 }
 
 .sasp-section-fb h2,
 .sasp-section-fb p {
-	color: #fff;
+	color: #fff !important;
+	border: none !important;
 }
 
 .sasp-section-ig {
-	background: linear-gradient(135deg, #833ab4, #e1306c);
-	color: #fff;
+	background: linear-gradient(135deg, #833ab4, #e1306c) !important;
+	color: #fff !important;
 	border-radius: 8px;
 	margin-bottom: 16px;
 }
 
 .sasp-section-ig h2,
 .sasp-section-ig p {
-	color: #fff;
+	color: #fff !important;
+	border: none !important;
 }
 
 .sasp-section-renewal {
-	background: linear-gradient(135deg, #2e7d32, #388e3c);
-	color: #fff;
+	background: linear-gradient(135deg, #2e7d32, #388e3c) !important;
+	color: #fff !important;
 	border-radius: 8px;
 	margin-bottom: 16px;
 }
 
 .sasp-section-renewal h2,
 .sasp-section-renewal p {
-	color: #fff;
+	color: #fff !important;
+	border: none !important;
 }
 
 /* Step cards */
