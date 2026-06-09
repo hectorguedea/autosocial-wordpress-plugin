@@ -157,6 +157,26 @@
 		});
 	});
 
+	// ── Dynamic time slots ───────────────────────────────────────────────────
+
+	$('#sasp-add-time').on('click', function () {
+		var newSlot = $('<div class="sasp-time-slot">' +
+			'<span class="dashicons dashicons-clock sasp-time-icon"></span>' +
+			'<input type="time" name="sasp_settings[post_times][]" value="12:00" class="sasp-time-input">' +
+			'<button type="button" class="button sasp-remove-time" title="Remove this time">' +
+				'<span class="dashicons dashicons-no-alt"></span>' +
+			'</button>' +
+		'</div>');
+		$('#sasp-times-container').append(newSlot);
+		newSlot.find('input[type=time]').trigger('focus');
+	});
+
+	$('#sasp-times-container').on('click', '.sasp-remove-time', function () {
+		if ($('.sasp-time-slot').length > 1) {
+			$(this).closest('.sasp-time-slot').remove();
+		}
+	});
+
 	// ── Inline help toggles ───────────────────────────────────────────────────
 
 	$('.sasp-help-toggle').on('click', function (e) {

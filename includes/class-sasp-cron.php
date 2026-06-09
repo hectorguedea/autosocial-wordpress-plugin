@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-Cron scheduling — two single-event hooks rescheduled daily.
+ * WP-Cron scheduling — dynamic number of daily post slots.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -9,27 +9,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class SASP_Cron {
 
+	const MAX_SLOTS = 20;
+
 	// ── Bootstrap ─────────────────────────────────────────────────────────────
 
 	public static function init(): void {
-		add_action( 'sasp_post_event_1', [ __CLASS__, 'handle_event_1' ] );
-		add_action( 'sasp_post_event_2', [ __CLASS__, 'handle_event_2' ] );
+		add_action( 'sasp_post_event', [ __CLASS__, 'handle_event' ] );
 	}
 
 	// ── Schedule management ───────────────────────────────────────────────────
 
 	public static function schedule_events(): void {
-		$s = get_option( 'sasp_settings', [] );
-
-		$time1 = (string) ( $s['post_time_1'] ?? '10:00' );
-		$time2 = (string) ( $s['post_time_2'] ?? '18:00' );
-
-		if ( ! wp_next_scheduled( 'sasp_post_event_1' ) ) {
-			wp_schedule_single_event( self::next_occurrence( $time1 ), 'sasp_post_event_1' );
-		}
-
-		if ( ! wp_next_scheduled( 'sasp_post_event_2' ) ) {
-			wp_schedule_single_event( self::next_occurrence( $time2 ), 'sasp_post_event_2' );
+		$times = self::get_post_times();
+		foreach ( $times as $index => $time ) {
+			if ( ! wp_next_scheduled( 'sasp_post_event', [ $index ] ) ) {
+				wp_schedule_single_event(
+					self::next_occurrence( $time ),
+					'sasp_post_event',
+					[ $index ]
+				);
+			}
 		}
 	}
 
@@ -39,45 +38,39 @@ class SASP_Cron {
 	}
 
 	public static function clear_events(): void {
+		for ( $i = 0; $i < self::MAX_SLOTS; $i++ ) {
+			wp_clear_scheduled_hook( 'sasp_post_event', [ $i ] );
+		}
+		// Also clear old-style events from v1.0.0 for migration.
 		wp_clear_scheduled_hook( 'sasp_post_event_1' );
 		wp_clear_scheduled_hook( 'sasp_post_event_2' );
 	}
 
 	// ── Cron callbacks ────────────────────────────────────────────────────────
 
-	public static function handle_event_1(): void {
+	public static function handle_event( int $slot_index ): void {
 		$s = get_option( 'sasp_settings', [] );
 		if ( ! empty( $s['enabled'] ) ) {
 			self::execute_post();
 		}
-		// Always reschedule even if posting is off (so it fires again tomorrow).
-		$time1 = (string) ( $s['post_time_1'] ?? '10:00' );
-		wp_schedule_single_event( self::next_occurrence_tomorrow( $time1 ), 'sasp_post_event_1' );
-	}
-
-	public static function handle_event_2(): void {
-		$s = get_option( 'sasp_settings', [] );
-		if ( ! empty( $s['enabled'] ) ) {
-			self::execute_post();
-		}
-		$time2 = (string) ( $s['post_time_2'] ?? '18:00' );
-		wp_schedule_single_event( self::next_occurrence_tomorrow( $time2 ), 'sasp_post_event_2' );
+		// Always reschedule for tomorrow even when posting is off.
+		$times = self::get_post_times();
+		$time  = $times[ $slot_index ] ?? '10:00';
+		wp_schedule_single_event(
+			self::next_occurrence_tomorrow( $time ),
+			'sasp_post_event',
+			[ $slot_index ]
+		);
 	}
 
 	// ── Core post logic ───────────────────────────────────────────────────────
 
 	/**
-	 * Select one product, build captions, post to enabled platforms, log results.
-	 *
-	 * Returns an array keyed by platform ('facebook', 'instagram') or a single
-	 * 'error' key when no product is available.
-	 *
 	 * @return array<string, array{success: bool, message: string}>
 	 */
 	public static function execute_post(): array {
 		$settings = get_option( 'sasp_settings', [] );
-
-		$product = SASP_Products::get_eligible_product();
+		$product  = SASP_Products::get_eligible_product();
 
 		if ( null === $product ) {
 			$msg = 'No eligible product found (no published, in-stock products with an HTTPS image).';
@@ -98,16 +91,12 @@ class SASP_Cron {
 		$results     = [];
 		$any_success = false;
 
-		// ── Facebook ──────────────────────────────────────────────────────────
 		if ( ! empty( $settings['enable_facebook'] ) ) {
 			$caption = SASP_Products::build_caption( $product, 'facebook' );
 			$result  = SASP_Meta_API::post_to_facebook( $product_id, $image_url, $caption );
 			SASP_Logger::add(
-				$product_id,
-				$product_title,
-				'facebook',
-				$result['success'] ? 'success' : 'failed',
-				$result['message']
+				$product_id, $product_title, 'facebook',
+				$result['success'] ? 'success' : 'failed', $result['message']
 			);
 			$results['facebook'] = $result;
 			if ( $result['success'] ) {
@@ -115,16 +104,12 @@ class SASP_Cron {
 			}
 		}
 
-		// ── Instagram ─────────────────────────────────────────────────────────
 		if ( ! empty( $settings['enable_instagram'] ) ) {
 			$caption = SASP_Products::build_caption( $product, 'instagram' );
 			$result  = SASP_Meta_API::post_to_instagram( $product_id, $image_url, $caption );
 			SASP_Logger::add(
-				$product_id,
-				$product_title,
-				'instagram',
-				$result['success'] ? 'success' : 'failed',
-				$result['message']
+				$product_id, $product_title, 'instagram',
+				$result['success'] ? 'success' : 'failed', $result['message']
 			);
 			$results['instagram'] = $result;
 			if ( $result['success'] ) {
@@ -138,7 +123,6 @@ class SASP_Cron {
 			return [ 'error' => [ 'success' => false, 'message' => $msg ] ];
 		}
 
-		// Only mark as posted if at least one platform succeeded.
 		if ( $any_success ) {
 			SASP_Products::mark_as_posted( $product_id );
 		}
@@ -146,27 +130,42 @@ class SASP_Cron {
 		return $results;
 	}
 
-	// ── Time helpers ──────────────────────────────────────────────────────────
+	// ── Helpers ───────────────────────────────────────────────────────────────
 
 	/**
-	 * Returns the next Unix timestamp for $time_str (HH:MM) in WP timezone.
-	 * If the time has already passed today, returns tomorrow's occurrence.
+	 * Returns the array of configured post times.
+	 * Migrates automatically from the v1.0.0 post_time_1/post_time_2 format.
 	 */
+	public static function get_post_times(): array {
+		$s = get_option( 'sasp_settings', [] );
+
+		if ( ! empty( $s['post_times'] ) && is_array( $s['post_times'] ) ) {
+			return $s['post_times'];
+		}
+
+		// Migrate from v1.0.0 two-slot format.
+		$times = [];
+		if ( ! empty( $s['post_time_1'] ) ) {
+			$times[] = $s['post_time_1'];
+		}
+		if ( ! empty( $s['post_time_2'] ) ) {
+			$times[] = $s['post_time_2'];
+		}
+		return $times ?: [ '10:00', '18:00' ];
+	}
+
 	private static function next_occurrence( string $time_str ): int {
 		[ $hour, $minute ] = array_map( 'intval', explode( ':', $time_str ) );
 		$tz     = wp_timezone();
 		$now    = new DateTime( 'now', $tz );
 		$target = new DateTime( 'today', $tz );
 		$target->setTime( $hour, $minute );
-
 		if ( $target <= $now ) {
 			$target->modify( '+1 day' );
 		}
-
 		return $target->getTimestamp();
 	}
 
-	/** Returns tomorrow's occurrence of $time_str in WP timezone. */
 	private static function next_occurrence_tomorrow( string $time_str ): int {
 		[ $hour, $minute ] = array_map( 'intval', explode( ':', $time_str ) );
 		$tz     = wp_timezone();

@@ -32,30 +32,39 @@ class SASP_Admin {
 	// ── Menu ──────────────────────────────────────────────────────────────────
 
 	public static function add_menu(): void {
-		$parent = class_exists( 'WooCommerce' ) ? 'woocommerce' : 'options-general.php';
-
-		add_submenu_page(
-			$parent,
+		add_menu_page(
 			__( 'AutoSocial Poster', 'sasp' ),
-			__( 'Auto Social Poster', 'sasp' ),
+			__( 'AutoSocial Poster', 'sasp' ),
+			'manage_options',
+			'sasp-settings',
+			[ __CLASS__, 'render_settings_page' ],
+			'dashicons-share',
+			56
+		);
+
+		// First submenu replaces the duplicate parent label with "Settings".
+		add_submenu_page(
+			'sasp-settings',
+			__( 'Settings — AutoSocial Poster', 'sasp' ),
+			__( 'Settings', 'sasp' ),
 			'manage_options',
 			'sasp-settings',
 			[ __CLASS__, 'render_settings_page' ]
 		);
 
 		add_submenu_page(
-			$parent,
-			__( 'Social Poster Logs', 'sasp' ),
-			__( 'Social Poster Logs', 'sasp' ),
+			'sasp-settings',
+			__( 'Logs — AutoSocial Poster', 'sasp' ),
+			__( 'Logs', 'sasp' ),
 			'manage_options',
 			'sasp-logs',
 			[ __CLASS__, 'render_logs_page' ]
 		);
 
 		add_submenu_page(
-			$parent,
-			__( 'AutoSocial Poster — Setup Guide', 'sasp' ),
-			__( 'Setup Guide', 'sasp' ),
+			'sasp-settings',
+			__( 'Setup Guide — AutoSocial Poster', 'sasp' ),
+			__( '📋 Setup Guide', 'sasp' ),
 			'manage_options',
 			'sasp-guide',
 			[ __CLASS__, 'render_guide_page' ]
@@ -121,11 +130,21 @@ class SASP_Admin {
 			$clean['ig_access_token'] = $old['ig_access_token'] ?? ''; // keep existing
 		}
 
-		// Time validation (HH:MM format).
-		$t1 = sanitize_text_field( $input['post_time_1'] ?? '10:00' );
-		$t2 = sanitize_text_field( $input['post_time_2'] ?? '18:00' );
-		$clean['post_time_1'] = preg_match( '/^\d{2}:\d{2}$/', $t1 ) ? $t1 : '10:00';
-		$clean['post_time_2'] = preg_match( '/^\d{2}:\d{2}$/', $t2 ) ? $t2 : '18:00';
+		// Post times — dynamic array (replaces post_time_1/post_time_2 from v1.0.0).
+		$raw_times   = (array) ( $input['post_times'] ?? [] );
+		$clean_times = [];
+		foreach ( $raw_times as $t ) {
+			$t = sanitize_text_field( (string) $t );
+			if ( preg_match( '/^\d{2}:\d{2}$/', $t ) ) {
+				$clean_times[] = $t;
+			}
+		}
+		if ( empty( $clean_times ) ) {
+			$clean_times = SASP_Cron::get_post_times(); // keep existing or default
+		}
+		$clean_times = array_slice( array_unique( $clean_times ), 0, 20 );
+		sort( $clean_times );
+		$clean['post_times'] = $clean_times;
 
 		// Caption template.
 		$tpl = sanitize_textarea_field( $input['caption_template'] ?? '' );
@@ -140,10 +159,7 @@ class SASP_Admin {
 		$clean['exclude_categories'] = array_map( 'intval', (array) ( $input['exclude_categories'] ?? [] ) );
 
 		// Reschedule cron if posting times changed.
-		if (
-			( $old['post_time_1'] ?? '' ) !== $clean['post_time_1'] ||
-			( $old['post_time_2'] ?? '' ) !== $clean['post_time_2']
-		) {
+		if ( ( $old['post_times'] ?? [] ) !== $clean['post_times'] ) {
 			add_action( 'shutdown', [ 'SASP_Cron', 'reschedule_events' ] );
 		}
 
@@ -227,9 +243,16 @@ class SASP_Admin {
 		$last_success = SASP_Logger::get_last_success();
 		$tz_string    = wp_timezone_string();
 
-		$next1_ts = wp_next_scheduled( 'sasp_post_event_1' );
-		$next2_ts = wp_next_scheduled( 'sasp_post_event_2' );
-		$date_fmt = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		$date_fmt    = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+		$post_times  = SASP_Cron::get_post_times();
+		$next_events = [];
+		foreach ( $post_times as $idx => $_ ) {
+			$ts = wp_next_scheduled( 'sasp_post_event', [ $idx ] );
+			if ( $ts ) {
+				$next_events[] = $ts;
+			}
+		}
+		sort( $next_events );
 
 		// Token age info.
 		$fb_token_info = self::token_age_info( 'sasp_fb_token_set_at' );
@@ -258,21 +281,18 @@ class SASP_Admin {
 				<span class="sasp-meta">
 					<?php printf( esc_html__( 'Posted history: %d product(s)', 'sasp' ), $posted_count ); ?>
 				</span>
-				<?php if ( $next1_ts ) : ?>
+				<?php if ( ! empty( $next_events ) ) : ?>
 					<span class="sasp-meta">
 						<?php printf(
-							esc_html__( 'Next post 1: %s', 'sasp' ),
-							'<strong>' . esc_html( get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $next1_ts ), $date_fmt ) ) . '</strong>'
+							esc_html__( 'Next post: %s', 'sasp' ),
+							'<strong>' . esc_html( get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $next_events[0] ), $date_fmt ) ) . '</strong>'
 						); ?>
 					</span>
-				<?php endif; ?>
-				<?php if ( $next2_ts ) : ?>
-					<span class="sasp-meta">
-						<?php printf(
-							esc_html__( 'Next post 2: %s', 'sasp' ),
-							'<strong>' . esc_html( get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $next2_ts ), $date_fmt ) ) . '</strong>'
-						); ?>
-					</span>
+					<?php if ( count( $next_events ) > 1 ) : ?>
+						<span class="sasp-meta">
+							<?php printf( esc_html__( '+%d more scheduled today', 'sasp' ), count( $next_events ) - 1 ); ?>
+						</span>
+					<?php endif; ?>
 				<?php endif; ?>
 			</div>
 
@@ -339,30 +359,37 @@ class SASP_Admin {
 					</div>
 
 					<!-- Schedule -->
-					<div class="sasp-card">
+					<div class="sasp-card" id="sasp-card-schedule">
 						<h2><?php esc_html_e( 'Schedule', 'sasp' ); ?></h2>
 						<p class="description">
 							<?php printf(
-								esc_html__( 'Times follow WordPress timezone: %s', 'sasp' ),
-								'<code>' . esc_html( $tz_string ) . '</code>'
+								wp_kses( __( 'Add as many post times per day as you like. Using timezone: <code>%s</code>', 'sasp' ), [ 'code' => [] ] ),
+								esc_html( $tz_string )
 							); ?>
 						</p>
-						<table class="form-table sasp-form-table">
-							<tr>
-								<th><?php esc_html_e( 'First Post Time', 'sasp' ); ?></th>
-								<td>
-									<input type="time" name="sasp_settings[post_time_1]"
-										value="<?php echo esc_attr( $settings['post_time_1'] ?? '10:00' ); ?>">
-								</td>
-							</tr>
-							<tr>
-								<th><?php esc_html_e( 'Second Post Time', 'sasp' ); ?></th>
-								<td>
-									<input type="time" name="sasp_settings[post_time_2]"
-										value="<?php echo esc_attr( $settings['post_time_2'] ?? '18:00' ); ?>">
-								</td>
-							</tr>
-						</table>
+						<div id="sasp-times-container" class="sasp-times-list">
+							<?php
+							$saved_times = $post_times ?: [ '10:00', '18:00' ];
+							foreach ( $saved_times as $t ) :
+							?>
+							<div class="sasp-time-slot">
+								<span class="dashicons dashicons-clock sasp-time-icon"></span>
+								<input type="time" name="sasp_settings[post_times][]"
+									value="<?php echo esc_attr( $t ); ?>"
+									class="sasp-time-input">
+								<button type="button" class="button sasp-remove-time" title="<?php esc_attr_e( 'Remove this time', 'sasp' ); ?>">
+									<span class="dashicons dashicons-no-alt"></span>
+								</button>
+							</div>
+							<?php endforeach; ?>
+						</div>
+						<button type="button" id="sasp-add-time" class="button sasp-add-time-btn">
+							<span class="dashicons dashicons-plus-alt2"></span>
+							<?php esc_html_e( 'Add another time', 'sasp' ); ?>
+						</button>
+						<p class="description" style="margin-top:8px">
+							<?php esc_html_e( 'Each slot posts one product. You can have 1–20 slots per day.', 'sasp' ); ?>
+						</p>
 					</div>
 
 					<!-- Facebook credentials -->
@@ -806,7 +833,7 @@ class SASP_Admin {
 			return;
 		}
 
-		$st = self::get_setup_status();
+		$st       = self::get_setup_status();
 		$all_done = $st['fb_configured'] && $st['fb_tested'] && $st['platform_on'] && $st['autopost_on'];
 		if ( $all_done ) {
 			return;
@@ -816,77 +843,102 @@ class SASP_Admin {
 		$items     = [
 			[
 				'done'  => true,
+				'icon'  => 'dashicons-plugins-checked',
 				'label' => __( 'Plugin installed and active', 'sasp' ),
 			],
 			[
 				'done'   => $st['fb_configured'],
-				'label'  => __( 'Facebook Page ID & Access Token entered', 'sasp' ),
+				'icon'   => 'dashicons-facebook',
+				'label'  => __( 'Facebook Page ID & Token saved', 'sasp' ),
 				'anchor' => '#sasp-card-facebook',
+				'cta'    => __( 'Add credentials ↓', 'sasp' ),
 			],
 			[
 				'done'   => $st['fb_tested'],
-				'label'  => __( 'Facebook connection tested successfully', 'sasp' ),
+				'icon'   => 'dashicons-yes-alt',
+				'label'  => __( 'Facebook connection verified', 'sasp' ),
 				'anchor' => '#sasp-card-facebook',
+				'cta'    => __( 'Test connection ↓', 'sasp' ),
 			],
 			[
 				'done'     => $st['ig_configured'],
-				'label'    => __( 'Instagram Business Account ID entered', 'sasp' ),
+				'icon'     => 'dashicons-instagram',
+				'label'    => __( 'Instagram Account ID saved', 'sasp' ),
 				'anchor'   => '#sasp-card-instagram',
+				'cta'      => __( 'Add ID ↓', 'sasp' ),
 				'optional' => true,
 			],
 			[
 				'done'   => $st['platform_on'],
-				'label'  => __( 'At least one platform enabled (Facebook or Instagram)', 'sasp' ),
+				'icon'   => 'dashicons-share',
+				'label'  => __( 'At least one platform enabled', 'sasp' ),
 				'anchor' => '#sasp-card-general',
+				'cta'    => __( 'Enable ↓', 'sasp' ),
 			],
 			[
 				'done'   => $st['autopost_on'],
+				'icon'   => 'dashicons-controls-play',
 				'label'  => __( 'Auto-posting turned ON', 'sasp' ),
 				'anchor' => '#sasp-card-general',
+				'cta'    => __( 'Turn on ↓', 'sasp' ),
 			],
 		];
+
+		$required = array_filter( $items, fn( $i ) => empty( $i['optional'] ) );
+		$done_req = count( array_filter( $required, fn( $i ) => $i['done'] ) );
+		$total_req = count( $required );
+		$pct       = (int) round( $done_req / $total_req * 100 );
 		?>
-		<div class="sasp-checklist" id="sasp-checklist">
-			<div class="sasp-checklist-header">
-				<span class="sasp-checklist-title">
-					<span class="dashicons dashicons-yes-alt"></span>
-					<?php esc_html_e( 'Setup Checklist', 'sasp' ); ?>
-				</span>
-				<span class="sasp-checklist-actions">
-					<a href="<?php echo $guide_url; ?>" class="button button-small">
-						<?php esc_html_e( 'Full Setup Guide →', 'sasp' ); ?>
+		<div class="sasp-onboard" id="sasp-checklist">
+			<div class="sasp-onboard-header">
+				<div class="sasp-onboard-title">
+					<span class="sasp-onboard-icon">🚀</span>
+					<div>
+						<strong><?php esc_html_e( 'Getting Started', 'sasp' ); ?></strong>
+						<span class="sasp-onboard-subtitle"><?php printf( esc_html__( '%d of %d required steps complete', 'sasp' ), $done_req, $total_req ); ?></span>
+					</div>
+				</div>
+				<div class="sasp-onboard-actions">
+					<a href="<?php echo $guide_url; ?>" class="sasp-onboard-guide-btn">
+						📋 <?php esc_html_e( 'Setup Guide', 'sasp' ); ?>
 					</a>
-					<button type="button" id="sasp-dismiss-checklist" class="button button-small">
-						<?php esc_html_e( 'Hide', 'sasp' ); ?>
-					</button>
-				</span>
+					<button type="button" id="sasp-dismiss-checklist" class="sasp-onboard-dismiss" title="<?php esc_attr_e( 'Hide this checklist', 'sasp' ); ?>">✕</button>
+				</div>
 			</div>
-			<ul class="sasp-checklist-items">
-				<?php foreach ( $items as $item ) : ?>
-					<li class="sasp-check-item <?php echo $item['done'] ? 'sasp-check-done' : 'sasp-check-todo'; ?> <?php echo ! empty( $item['optional'] ) ? 'sasp-check-optional' : ''; ?>">
-						<span class="sasp-check-icon"><?php echo $item['done'] ? '✅' : '⬜'; ?></span>
-						<span class="sasp-check-label">
-							<?php if ( ! $item['done'] && ! empty( $item['anchor'] ) ) : ?>
-								<a href="<?php echo esc_attr( $item['anchor'] ); ?>"><?php echo esc_html( $item['label'] ); ?></a>
-							<?php else : ?>
-								<?php echo esc_html( $item['label'] ); ?>
-							<?php endif; ?>
-							<?php if ( ! empty( $item['optional'] ) ) : ?>
-								<span class="sasp-optional-badge"><?php esc_html_e( 'optional', 'sasp' ); ?></span>
-							<?php endif; ?>
-						</span>
-					</li>
+
+			<div class="sasp-progress-wrap">
+				<div class="sasp-progress-bar">
+					<div class="sasp-progress-fill" style="width:<?php echo $pct; ?>%"></div>
+				</div>
+				<span class="sasp-progress-pct"><?php echo $pct; ?>%</span>
+			</div>
+
+			<div class="sasp-onboard-steps">
+				<?php foreach ( $items as $item ) :
+					$cls = $item['done'] ? 'sasp-step-done' : ( ! empty( $item['optional'] ) ? 'sasp-step-optional' : 'sasp-step-todo' );
+				?>
+				<div class="sasp-onboard-step <?php echo $cls; ?>">
+					<span class="sasp-onboard-step-check">
+						<?php if ( $item['done'] ) : ?>
+							<span class="dashicons dashicons-yes"></span>
+						<?php else : ?>
+							<span class="dashicons <?php echo esc_attr( $item['icon'] ); ?>"></span>
+						<?php endif; ?>
+					</span>
+					<span class="sasp-onboard-step-label">
+						<?php echo esc_html( $item['label'] ); ?>
+						<?php if ( ! empty( $item['optional'] ) ) : ?>
+							<em class="sasp-optional-tag"><?php esc_html_e( 'optional', 'sasp' ); ?></em>
+						<?php endif; ?>
+					</span>
+					<?php if ( ! $item['done'] && ! empty( $item['anchor'] ) ) : ?>
+						<a href="<?php echo esc_attr( $item['anchor'] ); ?>" class="sasp-onboard-cta">
+							<?php echo esc_html( $item['cta'] ?? __( 'Go ↓', 'sasp' ) ); ?>
+						</a>
+					<?php endif; ?>
+				</div>
 				<?php endforeach; ?>
-			</ul>
-			<p class="sasp-checklist-footer">
-				<?php printf(
-					wp_kses(
-						__( 'First time? Read the <a href="%s">Setup Guide</a> for step-by-step instructions on getting your Facebook and Instagram tokens from Meta.', 'sasp' ),
-						[ 'a' => [ 'href' => [] ] ]
-					),
-					$guide_url
-				); ?>
-			</p>
+			</div>
 		</div>
 		<?php
 	}
@@ -906,43 +958,65 @@ class SASP_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'sasp' ) );
 		}
-		$settings_url = esc_url( admin_url( 'admin.php?page=sasp-settings' ) );
-		$allowed_a    = [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ];
+		$settings_url  = esc_url( admin_url( 'admin.php?page=sasp-settings' ) );
+		$allowed_a     = [ 'a' => [ 'href' => [], 'target' => [], 'rel' => [] ] ];
+		$allowed_a_str = array_merge( $allowed_a, [ 'strong' => [] ] );
 		?>
 		<div class="wrap sasp-wrap sasp-guide-page">
-			<h1 class="sasp-page-title">
-				<span class="dashicons dashicons-clipboard"></span>
-				<?php esc_html_e( 'Setup Guide', 'sasp' ); ?>
-			</h1>
-			<p class="sasp-guide-intro">
-				<?php esc_html_e( 'Follow these steps to connect AutoSocial Poster to your Facebook Page and Instagram Business account via the Meta Graph API.', 'sasp' ); ?>
-				<?php printf(
-					wp_kses( __( 'Once done, go to <a href="%s">Settings</a> to enter your credentials and enable auto-posting.', 'sasp' ), $allowed_a ),
-					$settings_url
-				); ?>
-			</p>
 
+			<!-- Hero -->
+			<div class="sasp-guide-hero">
+				<div class="sasp-guide-hero-text">
+					<h1>
+						<span class="dashicons dashicons-share"></span>
+						<?php esc_html_e( 'Setup Guide', 'sasp' ); ?>
+					</h1>
+					<p><?php esc_html_e( 'Connect your WooCommerce store to Facebook and Instagram in three steps.', 'sasp' ); ?></p>
+					<div class="sasp-guide-flow">
+						<span class="sasp-flow-step sasp-flow-active">① <?php esc_html_e( 'Get Token', 'sasp' ); ?></span>
+						<span class="sasp-flow-arrow">→</span>
+						<span class="sasp-flow-step sasp-flow-active">② <?php esc_html_e( 'Enter Credentials', 'sasp' ); ?></span>
+						<span class="sasp-flow-arrow">→</span>
+						<span class="sasp-flow-step sasp-flow-active">③ <?php esc_html_e( 'Test & Enable', 'sasp' ); ?></span>
+					</div>
+				</div>
+				<div class="sasp-guide-platforms">
+					<div class="sasp-platform-chip sasp-chip-fb">
+						<span>📘</span> Facebook
+					</div>
+					<div class="sasp-platform-chip sasp-chip-ig">
+						<span>📸</span> Instagram
+					</div>
+				</div>
+			</div>
+
+			<!-- Requirements quick-check -->
 			<div class="sasp-guide-requirements">
-				<h3><?php esc_html_e( 'Before you begin', 'sasp' ); ?></h3>
+				<strong><?php esc_html_e( 'Before you begin:', 'sasp' ); ?></strong>
 				<ul>
-					<li><?php esc_html_e( '✅ A Facebook Page for your store (not a personal profile)', 'sasp' ); ?></li>
-					<li><?php esc_html_e( '✅ Admin access to that Facebook Page', 'sasp' ); ?></li>
-					<li><?php esc_html_e( '✅ A Meta Developer account — free, sign up at developers.facebook.com', 'sasp' ); ?></li>
-					<li><?php esc_html_e( '☑ An Instagram Business or Creator account connected to your Facebook Page (only needed if you want to post to Instagram)', 'sasp' ); ?></li>
+					<li>✅ <?php esc_html_e( 'A Facebook Page for your store (not a personal profile)', 'sasp' ); ?></li>
+					<li>✅ <?php esc_html_e( 'Admin access to that Facebook Page', 'sasp' ); ?></li>
+					<li>✅ <?php printf( wp_kses( __( 'A free Meta Developer account — sign up at <a href="%s" target="_blank" rel="noopener">developers.facebook.com</a>', 'sasp' ), $allowed_a ), 'https://developers.facebook.com' ); ?></li>
+					<li>☑ <?php esc_html_e( 'Instagram Business/Creator account linked to your Page (only if posting to Instagram)', 'sasp' ); ?></li>
 				</ul>
 			</div>
 
-			<div class="sasp-guide-toc">
-				<a href="#guide-facebook"><?php esc_html_e( 'Part 1: Facebook', 'sasp' ); ?></a>
-				<span>·</span>
-				<a href="#guide-instagram"><?php esc_html_e( 'Part 2: Instagram', 'sasp' ); ?></a>
-				<span>·</span>
-				<a href="#guide-renewal"><?php esc_html_e( 'Part 3: Token Renewal', 'sasp' ); ?></a>
+			<!-- Navigation pills -->
+			<div class="sasp-guide-nav">
+				<a href="#guide-facebook" class="sasp-guide-nav-pill sasp-nav-fb">📘 <?php esc_html_e( 'Part 1: Facebook', 'sasp' ); ?></a>
+				<a href="#guide-instagram" class="sasp-guide-nav-pill sasp-nav-ig">📸 <?php esc_html_e( 'Part 2: Instagram', 'sasp' ); ?></a>
+				<a href="#guide-renewal" class="sasp-guide-nav-pill sasp-nav-renewal">🔄 <?php esc_html_e( 'Part 3: Renewal', 'sasp' ); ?></a>
 			</div>
 
 			<!-- ── Part 1: Facebook ─────────────────────────────────────────── -->
 			<div class="sasp-guide-section" id="guide-facebook">
-				<h2><?php esc_html_e( 'Part 1: Facebook Setup', 'sasp' ); ?></h2>
+				<div class="sasp-section-header sasp-section-fb">
+					<span class="sasp-section-emoji">📘</span>
+					<div>
+						<h2><?php esc_html_e( 'Part 1: Facebook Setup', 'sasp' ); ?></h2>
+						<p><?php esc_html_e( 'Create an App, get a Page Access Token, and find your Page ID.', 'sasp' ); ?></p>
+					</div>
+				</div>
 
 				<div class="sasp-step-card">
 					<div class="sasp-step-num">1</div>
@@ -1051,8 +1125,13 @@ class SASP_Admin {
 
 			<!-- ── Part 2: Instagram ─────────────────────────────────────────── -->
 			<div class="sasp-guide-section" id="guide-instagram">
-				<h2><?php esc_html_e( 'Part 2: Instagram Setup (optional)', 'sasp' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Skip this section if you only want to post to Facebook.', 'sasp' ); ?></p>
+				<div class="sasp-section-header sasp-section-ig">
+					<span class="sasp-section-emoji">📸</span>
+					<div>
+						<h2><?php esc_html_e( 'Part 2: Instagram Setup', 'sasp' ); ?></h2>
+						<p><?php esc_html_e( 'Link your Instagram Business account to your Facebook Page. Optional — skip if you only need Facebook.', 'sasp' ); ?></p>
+					</div>
+				</div>
 
 				<div class="sasp-step-card">
 					<div class="sasp-step-num">1</div>
@@ -1138,28 +1217,55 @@ class SASP_Admin {
 
 			<!-- ── Part 3: Token Renewal ─────────────────────────────────────── -->
 			<div class="sasp-guide-section" id="guide-renewal">
-				<h2><?php esc_html_e( 'Part 3: Token Renewal', 'sasp' ); ?></h2>
-				<div class="sasp-guide-warning">
-					<?php esc_html_e( 'Meta Page Access Tokens expire in ~60 days. This is a Meta platform limitation and cannot be changed. You must renew before expiry or posts will fail.', 'sasp' ); ?>
+				<div class="sasp-section-header sasp-section-renewal">
+					<span class="sasp-section-emoji">🔄</span>
+					<div>
+						<h2><?php esc_html_e( 'Part 3: Token Renewal', 'sasp' ); ?></h2>
+						<p><?php esc_html_e( 'Meta tokens expire in ~60 days. Here\'s how to renew them.', 'sasp' ); ?></p>
+					</div>
 				</div>
-				<p><?php esc_html_e( 'The plugin shows a warning in the WordPress admin when your token is 53+ days old. When you see it:', 'sasp' ); ?></p>
-				<ol>
-					<li><?php esc_html_e( 'Repeat Steps 3–4 from Part 1 (Graph API Explorer + Token Debugger) to get a new long-lived token.', 'sasp' ); ?></li>
-					<li><?php printf(
-						wp_kses( __( 'Go to <a href="%s">Settings → Facebook card</a> → paste the new token → Save Settings.', 'sasp' ), $allowed_a ),
-						$settings_url
-					); ?></li>
-					<li><?php esc_html_e( 'Click "Test Facebook Connection" to confirm it works.', 'sasp' ); ?></li>
-				</ol>
-				<div class="sasp-guide-note">
-					<?php esc_html_e( 'Pro tip: set a calendar reminder for 55 days after saving a new token so you never miss a renewal deadline.', 'sasp' ); ?>
+
+				<!-- Token lifetime visual -->
+				<div class="sasp-token-timeline">
+					<div class="sasp-tl-segment sasp-tl-safe">
+						<span><?php esc_html_e( 'Days 0–52', 'sasp' ); ?></span>
+						<strong><?php esc_html_e( '✅ Active', 'sasp' ); ?></strong>
+					</div>
+					<div class="sasp-tl-segment sasp-tl-warn">
+						<span><?php esc_html_e( 'Days 53–59', 'sasp' ); ?></span>
+						<strong><?php esc_html_e( '⚠ Warning', 'sasp' ); ?></strong>
+					</div>
+					<div class="sasp-tl-segment sasp-tl-expire">
+						<span><?php esc_html_e( 'Day 60+', 'sasp' ); ?></span>
+						<strong><?php esc_html_e( '❌ Expired', 'sasp' ); ?></strong>
+					</div>
+				</div>
+
+				<div class="sasp-step-card">
+					<div class="sasp-step-num" style="background:#d97706">!</div>
+					<div class="sasp-step-body">
+						<h3><?php esc_html_e( 'When you see the expiry warning:', 'sasp' ); ?></h3>
+						<ol>
+							<li><?php printf( wp_kses( __( 'Go to <a href="%s" target="_blank" rel="noopener">Graph API Explorer</a> → select your app → generate a new User Token with the same permissions.', 'sasp' ), $allowed_a ), 'https://developers.facebook.com/tools/explorer' ); ?></li>
+							<li><?php esc_html_e( 'Switch from User Token to your Page in the dropdown, then copy the Page Token.', 'sasp' ); ?></li>
+							<li><?php printf( wp_kses( __( 'Open the <a href="%s" target="_blank" rel="noopener">Access Token Debugger</a> → paste the token → click "Extend Access Token".', 'sasp' ), $allowed_a ), 'https://developers.facebook.com/tools/debug/accesstoken' ); ?></li>
+							<li><?php printf( wp_kses( __( 'Go to <a href="%s">Settings → Facebook card</a> → paste the new long-lived token → Save Settings.', 'sasp' ), $allowed_a ), $settings_url ); ?></li>
+							<li><?php esc_html_e( 'Click "Test Facebook Connection" to confirm.', 'sasp' ); ?></li>
+						</ol>
+						<div class="sasp-guide-note">
+							💡 <?php esc_html_e( 'Set a calendar reminder for 55 days after saving a new token so you never miss the renewal window.', 'sasp' ); ?>
+						</div>
+					</div>
 				</div>
 			</div>
 
 			<div class="sasp-guide-footer">
-				<a href="<?php echo $settings_url; ?>" class="button button-primary">
+				<a href="<?php echo $settings_url; ?>" class="button button-primary button-hero">
 					<?php esc_html_e( '← Back to Settings', 'sasp' ); ?>
 				</a>
+				<span class="sasp-guide-footer-note">
+					<?php esc_html_e( 'Questions? Check the WordPress admin notice when your token is about to expire — the plugin will remind you automatically.', 'sasp' ); ?>
+				</span>
 			</div>
 		</div>
 		<?php
