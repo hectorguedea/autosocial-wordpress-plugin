@@ -16,6 +16,7 @@ class SASP_Admin {
 		add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ] );
 		add_action( 'admin_notices', [ __CLASS__, 'token_expiry_notice' ] );
+		add_action( 'in_admin_header', [ __CLASS__, 'suppress_foreign_notices' ], PHP_INT_MAX );
 
 		// AJAX handlers.
 		add_action( 'wp_ajax_sasp_test_facebook',      [ __CLASS__, 'ajax_test_facebook' ] );
@@ -27,6 +28,18 @@ class SASP_Admin {
 
 		// First-run redirect to setup guide.
 		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_to_guide' ] );
+	}
+
+	// ── Suppress foreign admin notices on our pages ───────────────────────────
+
+	public static function suppress_foreign_notices(): void {
+		$screen = get_current_screen();
+		if ( ! $screen || false === strpos( $screen->id, 'sasp' ) ) {
+			return;
+		}
+		remove_all_actions( 'admin_notices' );
+		remove_all_actions( 'all_admin_notices' );
+		add_action( 'admin_notices', [ __CLASS__, 'token_expiry_notice' ] );
 	}
 
 	// ── Menu ──────────────────────────────────────────────────────────────────
