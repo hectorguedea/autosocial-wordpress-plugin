@@ -160,11 +160,11 @@ class SASP_Admin {
 		$clean['post_times'] = $clean_times;
 
 		// Caption template.
-		$tpl = sanitize_textarea_field( $input['caption_template'] ?? '' );
+		$tpl = sanitize_textarea_field( wp_unslash( $input['caption_template'] ?? '' ) );
 		$clean['caption_template'] = '' !== $tpl ? $tpl : SASP_Products::default_template();
 
 		// Hashtags (separate field — auto-appended after every caption).
-		$ht = sanitize_textarea_field( $input['hashtags'] ?? '' );
+		$ht = sanitize_textarea_field( wp_unslash( $input['hashtags'] ?? '' ) );
 		$clean['hashtags'] = '' !== $ht ? $ht : SASP_Products::default_hashtags();
 
 		// Category lists.

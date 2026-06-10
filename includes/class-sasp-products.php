@@ -183,7 +183,7 @@ class SASP_Products {
 	}
 
 	public static function default_hashtags(): string {
-		return '#deathmetal #brutaldeathmetal #metalcds #hectorguedea';
+		return '#sindromeproductions #deathmetal #brutaldeathmetal #goregrind #grindcore #metalcds #metalcollector #metalcollection';
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
