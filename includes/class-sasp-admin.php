@@ -541,7 +541,9 @@ class SASP_Admin {
 						<h2><?php esc_html_e( 'Caption Template', 'sasp' ); ?></h2>
 						<p class="description">
 							<?php esc_html_e( 'Placeholders:', 'sasp' ); ?>
-							<code>{product_title}</code> <code>{short_description}</code>
+							<code>{product_title}</code>
+							<code>{description}</code> <small><?php esc_html_e( '(main description)', 'sasp' ); ?></small>
+							<code>{short_description}</code> <small><?php esc_html_e( '(excerpt)', 'sasp' ); ?></small>
 							<code>{price}</code> <code>{product_url}</code>
 							<code>{sku}</code> <code>{categories}</code> <code>{tags}</code> <code>{hashtags}</code>
 						</p>

@@ -124,6 +124,7 @@ class SASP_Products {
 		$product_id  = $product->get_id();
 		$title       = $product->get_name();
 		$short_desc  = wp_strip_all_tags( $product->get_short_description() );
+		$description = wp_strip_all_tags( $product->get_description() );
 		$price       = html_entity_decode( wp_strip_all_tags( wc_price( (float) $product->get_price() ) ) );
 		$sku         = $product->get_sku();
 		$product_url = get_permalink( $product_id );
@@ -164,8 +165,8 @@ class SASP_Products {
 		$hashtags = trim( (string) ( $settings['hashtags'] ?? self::default_hashtags() ) );
 
 		$caption = str_replace(
-			[ '{product_title}', '{short_description}', '{price}', '{product_url}', '{sku}', '{categories}', '{tags}', '{hashtags}' ],
-			[ $title, $short_desc, $price, $product_url, $sku, $categories, $tags, $hashtags ],
+			[ '{product_title}', '{short_description}', '{description}', '{price}', '{product_url}', '{sku}', '{categories}', '{tags}', '{hashtags}' ],
+			[ $title, $short_desc, $description, $price, $product_url, $sku, $categories, $tags, $hashtags ],
 			$template
 		);
 
@@ -178,7 +179,7 @@ class SASP_Products {
 	}
 
 	public static function default_template(): string {
-		return "💿 Available now!\n\n{product_title}\n\n{short_description}\n\nPrice: {price}\n\nBuy at:\n{product_url}";
+		return "💿 Available now!\n\n{product_title}\n\n{description}\n\nPrice: {price}\n\nBuy at:\n{product_url}";
 	}
 
 	public static function default_hashtags(): string {
