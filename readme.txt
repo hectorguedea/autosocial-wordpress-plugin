@@ -4,7 +4,7 @@ Tags:              woocommerce, facebook, instagram, social media, auto post, me
 Requires at least: 6.0
 Tested up to:      6.7
 Requires PHP:      8.0
-Stable tag:        1.1.0
+Stable tag:        1.2.0
 License:           GPL-2.0+
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -24,7 +24,8 @@ Tokens are stored encrypted at rest. No token is ever exposed in HTML or URLs.
 * Publishes to Instagram Business (container → publish flow)
 * Separate Hashtags field — auto-appended to every post, or place `{hashtags}` manually in the template
 * Fully customizable caption template with placeholders:
-  `{product_title}`, `{short_description}`, `{price}`, `{product_url}`, `{sku}`, `{categories}`, `{tags}`, `{hashtags}`
+  `{product_title}`, `{description}`, `{short_description}`, `{price}`, `{product_url}`, `{sku}`, `{categories}`, `{tags}`, `{hashtags}`
+  (`{description}` = main Product Description; `{short_description}` = WooCommerce excerpt)
 * UTM parameters automatically added to product URLs
 * Posted-product history — never repeats a product until all have been posted, then cycles again
 * Category include/exclude filters
@@ -54,7 +55,9 @@ Tokens are stored encrypted at rest. No token is ever exposed in HTML or URLs.
   - `pages_manage_posts`
   - `pages_read_engagement`
   - `pages_show_list`
-* A long-lived Facebook Page Access Token (~60 day expiry)
+  - `instagram_basic` (only if posting to Instagram)
+  - `instagram_content_publish` (only if posting to Instagram)
+* A Facebook Page Access Token (Page tokens obtained from a long-lived User Token do not expire)
 * An Instagram Business or Creator account linked to the Facebook Page (optional — only if posting to Instagram)
 
 == Installation ==
@@ -73,25 +76,26 @@ The plugin includes a full built-in setup guide at **AutoSocial Poster → Setup
 
 1. Register as a Meta Developer at developers.facebook.com (free).
 2. Create a Meta App (Business type).
-3. Open **Graph API Explorer** → select your app → generate an Access Token with:
-   `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`
-4. Switch from User Token to your Page in the token dropdown.
-5. Extend to ~60 days via the **Access Token Debugger** → "Extend Access Token".
-6. Find your Page ID: go to your Facebook Page → About → scroll down to "Page ID".
-7. Enter both values in **AutoSocial Poster → Settings → Facebook card**.
+3. Open **Graph API Explorer** → select your app → add permissions:
+   `pages_manage_posts`, `pages_read_engagement`, `pages_show_list`, `instagram_basic`, `instagram_content_publish`
+4. Click **Generate Access Token** and authorize the popup.
+5. Switch from "User Token" to your Facebook Page in the token dropdown.
+6. Extend via the **Access Token Debugger** → "Extend Access Token". Page tokens derived from long-lived User tokens often show **Expires: Never**.
+7. Your Page ID is the `id` field returned in the Explorer response, or find it at your Facebook Page → About.
+8. Enter the token and Page ID in **AutoSocial Poster → Settings → Facebook card**.
 
 **Part 2 — Instagram (optional)**
 
 1. Make sure your Instagram account is a Business or Creator account.
-2. Connect it to your Facebook Page: Instagram app → Profile → Edit Profile → Page.
-3. In Graph API Explorer, run:
-   `{YOUR_PAGE_ID}?fields=instagram_business_account`
-   The `id` inside the result is your Instagram Business Account ID.
+2. Connect it to your Facebook Page: Facebook Page → Settings → Instagram → Connect account.
+3. In Graph API Explorer (with the Page token selected), run:
+   `me?fields=instagram_business_account`
+   The `id` inside `instagram_business_account` is your Instagram Business Account ID.
 4. Enter it in **Settings → Instagram card**. The Facebook token is reused — no separate token needed.
 
 **Token renewal**
 
-Long-lived Page Access Tokens expire in ~60 days. The plugin warns you at 53+ days. To renew, repeat steps 3–5 from Part 1 and paste the new token in Settings.
+Page Access Tokens obtained via Graph API Explorer from a long-lived User Token typically show **Expires: Never** in the Access Token Debugger — meaning no renewal is needed. If your token does expire, the plugin warns you at 53+ days. To renew, repeat steps 3–6 from Part 1 and paste the new token in Settings.
 
 == WP-Cron reliability ==
 
@@ -141,6 +145,13 @@ No. The plugin uses the same Facebook Page Access Token for both platforms. Just
 
 == Changelog ==
 
+= 1.2.0 =
+* New: `{description}` placeholder maps to the main WooCommerce Product Description field (vs `{short_description}` which maps to the excerpt).
+* New: default caption template updated to use `{description}` so products with no excerpt still get a caption body.
+* New: other plugins' admin notices are suppressed on AutoSocial pages — cleaner UI.
+* Fix: `wp_unslash()` added before sanitizing caption template and hashtags fields — prevents character corruption on save.
+* Fix: default hashtags updated (removed personal tag, added genre/collector tags).
+
 = 1.1.0 =
 * New: standalone top-level menu — plugin no longer lives inside the WooCommerce menu.
 * New: unlimited daily post slots — add or remove time slots freely (replaces fixed 2-post limit).
@@ -156,6 +167,9 @@ No. The plugin uses the same Facebook Page Access Token for both platforms. Just
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Adds `{description}` placeholder for main product description, fixes hashtag saving, and cleans up the admin UI. Safe to update — no database changes.
 
 = 1.1.0 =
 Major UX update: standalone menu, unlimited post scheduling, and built-in setup guide. No database changes — safe to update.

@@ -3,7 +3,7 @@
  * Plugin Name:       AutoSocial Poster
  * Plugin URI:        https://hectorguedea.com
  * Description:       Automatically publishes your WooCommerce products to Facebook Page and Instagram Business via Meta Graph API. Schedule as many daily posts as you want, customize captions and hashtags, filter by category, and track every post from the built-in log. Includes a step-by-step setup guide for getting your Meta tokens.
- * Version:           1.1.0
+ * Version:           1.2.0
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            Héctor Guedea
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SASP_VERSION', '1.1.0' );
+define( 'SASP_VERSION', '1.2.0' );
 define( 'SASP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SASP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'SASP_PLUGIN_FILE', __FILE__ );
