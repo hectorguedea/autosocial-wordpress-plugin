@@ -4,7 +4,7 @@ Tags:              woocommerce, facebook, instagram, social media, auto post, me
 Requires at least: 6.0
 Tested up to:      6.7
 Requires PHP:      8.0
-Stable tag:        1.2.0
+Stable tag:        1.2.1
 License:           GPL-2.0+
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -144,6 +144,9 @@ Yes. Tokens are encrypted with AES-256-CBC before being written to the database,
 No. The plugin uses the same Facebook Page Access Token for both platforms. Just enter your Instagram Business Account ID and leave the Instagram token field blank.
 
 == Changelog ==
+
+= 1.2.1 =
+* Fix: percent-encode non-ASCII characters in product image URLs (e.g. filenames with Unicode ellipsis `…`) before sending to Meta API — prevents HTTP 400 "Only photo or video" when Instagram cannot fetch the image.
 
 = 1.2.0 =
 * New: `{description}` placeholder maps to the main WooCommerce Product Description field (vs `{short_description}` which maps to the excerpt).

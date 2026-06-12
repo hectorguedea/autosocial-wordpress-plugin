@@ -88,6 +88,10 @@ class SASP_Cron {
 			return [ 'error' => [ 'success' => false, 'message' => $msg ] ];
 		}
 
+		// Percent-encode any non-ASCII characters in the filename (e.g. Unicode ellipsis)
+		// so Meta's servers can fetch the image without a 400 error.
+		$image_url = self::encode_image_url( $image_url );
+
 		// Meta API only accepts JPEG and PNG. Detect unsupported formats via URL extension
 		// and via a HEAD request so we skip before burning an API call.
 		$ext = strtolower( pathinfo( strtok( $image_url, '?' ), PATHINFO_EXTENSION ) );
@@ -141,6 +145,23 @@ class SASP_Cron {
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────────
+
+	/**
+	 * Ensure every path segment in a URL is properly percent-encoded.
+	 * Handles filenames with Unicode characters (e.g. ellipsis …, accented chars)
+	 * that Instagram's servers cannot fetch when passed raw or double-encoded.
+	 */
+	private static function encode_image_url( string $url ): string {
+		$parts = parse_url( $url );
+		if ( empty( $parts['host'] ) || empty( $parts['path'] ) ) {
+			return $url;
+		}
+		// Decode first (handles already-encoded URLs), then re-encode each segment.
+		$segments     = explode( '/', rawurldecode( $parts['path'] ) );
+		$encoded_path = implode( '/', array_map( 'rawurlencode', $segments ) );
+		$query        = ! empty( $parts['query'] ) ? '?' . $parts['query'] : '';
+		return $parts['scheme'] . '://' . $parts['host'] . $encoded_path . $query;
+	}
 
 	/**
 	 * Returns the array of configured post times.
