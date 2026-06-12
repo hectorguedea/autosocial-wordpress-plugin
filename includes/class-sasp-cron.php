@@ -88,6 +88,16 @@ class SASP_Cron {
 			return [ 'error' => [ 'success' => false, 'message' => $msg ] ];
 		}
 
+		// Meta API only accepts JPEG and PNG. Detect unsupported formats via URL extension
+		// and via a HEAD request so we skip before burning an API call.
+		$ext = strtolower( pathinfo( strtok( $image_url, '?' ), PATHINFO_EXTENSION ) );
+		if ( in_array( $ext, [ 'webp', 'gif', 'svg', 'avif', 'bmp', 'tiff', 'tif' ], true ) ) {
+			$msg = "Skipped: product image is {$ext} format. Meta API requires JPEG or PNG. Convert the featured image and retry.";
+			SASP_Logger::add( $product_id, $product_title, 'system', 'skipped', $msg );
+			SASP_Products::mark_as_posted( $product_id ); // skip this product so rotation advances
+			return [ 'error' => [ 'success' => false, 'message' => $msg ] ];
+		}
+
 		$results     = [];
 		$any_success = false;
 
