@@ -77,8 +77,9 @@ class SASP_Meta_API {
 			'timeout' => 30,
 			'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
 			'body'    => [
-				'image_url' => $image_url,
-				'caption'   => $caption,
+				'media_type' => 'IMAGE',
+				'image_url'  => $image_url,
+				'caption'    => $caption,
 			],
 		] );
 
