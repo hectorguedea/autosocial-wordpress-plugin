@@ -25,6 +25,7 @@ class SASP_Admin {
 		add_action( 'wp_ajax_sasp_reset_history',      [ __CLASS__, 'ajax_reset_history' ] );
 		add_action( 'wp_ajax_sasp_clear_logs',         [ __CLASS__, 'ajax_clear_logs' ] );
 		add_action( 'wp_ajax_sasp_dismiss_checklist',  [ __CLASS__, 'ajax_dismiss_checklist' ] );
+		add_action( 'wp_ajax_sasp_retry_post',         [ __CLASS__, 'ajax_retry_post' ] );
 
 		// First-run redirect to setup guide.
 		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_to_guide' ] );
@@ -237,7 +238,9 @@ class SASP_Admin {
 			'strings'  => [
 				'confirm_post'  => __( 'This will immediately post a product to your enabled platforms. Continue?', 'sasp' ),
 				'confirm_reset' => __( 'Reset the posted history? All products will become eligible again. Continue?', 'sasp' ),
-				'confirm_clear' => __( 'Delete all logs? This cannot be undone. Continue?', 'sasp' ),
+				'confirm_clear'  => __( 'Delete all logs? This cannot be undone. Continue?', 'sasp' ),
+				'confirm_retry'  => __( 'Retry posting this product to the failed platform? Continue?', 'sasp' ),
+				'retry'          => __( '↺ Retry', 'sasp' ),
 				'testing'       => __( 'Testing…', 'sasp' ),
 				'posting'       => __( 'Posting…', 'sasp' ),
 				'conn_error'    => __( 'Connection error — check browser console.', 'sasp' ),
@@ -688,11 +691,12 @@ class SASP_Admin {
 						<th class="column-platform"><?php esc_html_e( 'Platform', 'sasp' ); ?></th>
 						<th class="column-status"><?php esc_html_e( 'Status', 'sasp' ); ?></th>
 						<th><?php esc_html_e( 'Message / API Response', 'sasp' ); ?></th>
+						<th class="column-actions"><?php esc_html_e( 'Actions', 'sasp' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
 					<?php if ( empty( $logs ) ) : ?>
-						<tr><td colspan="5"><?php esc_html_e( 'No log entries yet.', 'sasp' ); ?></td></tr>
+						<tr><td colspan="6"><?php esc_html_e( 'No log entries yet.', 'sasp' ); ?></td></tr>
 					<?php else : ?>
 						<?php foreach ( $logs as $log ) : ?>
 							<tr>
@@ -714,6 +718,16 @@ class SASP_Admin {
 									</span>
 								</td>
 								<td class="sasp-log-msg"><small><?php echo esc_html( $log['message'] ); ?></small></td>
+								<td class="sasp-log-actions">
+									<?php if ( 'failed' === $log['status'] && (int) $log['product_id'] > 0 && 'system' !== $log['platform'] ) : ?>
+										<button type="button" class="button button-small sasp-retry-btn"
+											data-product-id="<?php echo esc_attr( (string) $log['product_id'] ); ?>"
+											data-platform="<?php echo esc_attr( $log['platform'] ); ?>">
+											↺ <?php esc_html_e( 'Retry', 'sasp' ); ?>
+										</button>
+										<span class="sasp-retry-result"></span>
+									<?php endif; ?>
+								</td>
 							</tr>
 						<?php endforeach; ?>
 					<?php endif; ?>
@@ -788,6 +802,33 @@ class SASP_Admin {
 		$any_success
 			? wp_send_json_success( implode( "\n", $lines ) )
 			: wp_send_json_error( implode( "\n", $lines ) );
+	}
+
+	public static function ajax_retry_post(): void {
+		self::verify_ajax();
+
+		$product_id = (int) ( $_POST['product_id'] ?? 0 );
+		$platform   = sanitize_key( $_POST['platform'] ?? '' );
+
+		if ( $product_id <= 0 || ! in_array( $platform, [ 'facebook', 'instagram' ], true ) ) {
+			wp_send_json_error( __( 'Invalid product ID or platform.', 'sasp' ) );
+			return;
+		}
+
+		if ( get_transient( 'sasp_post_now_lock' ) ) {
+			wp_send_json_error( __( 'Please wait 60 seconds before triggering another manual post.', 'sasp' ) );
+			return;
+		}
+		set_transient( 'sasp_post_now_lock', 1, 60 );
+
+		$result = SASP_Cron::execute_post_for_product( $product_id, $platform );
+
+		if ( $result['success'] ) {
+			SASP_Products::mark_as_posted( $product_id );
+			wp_send_json_success( $result['message'] );
+		} else {
+			wp_send_json_error( $result['message'] );
+		}
 	}
 
 	public static function ajax_reset_history(): void {

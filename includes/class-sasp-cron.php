@@ -66,6 +66,54 @@ class SASP_Cron {
 	// ── Core post logic ───────────────────────────────────────────────────────
 
 	/**
+	 * Post a specific product to one platform (used by the Logs "Retry" button).
+	 *
+	 * @return array{success: bool, message: string}
+	 */
+	public static function execute_post_for_product( int $product_id, string $platform ): array {
+		if ( ! in_array( $platform, [ 'facebook', 'instagram' ], true ) ) {
+			return [ 'success' => false, 'message' => "Unknown platform: {$platform}" ];
+		}
+
+		$product = wc_get_product( $product_id );
+		if ( ! $product ) {
+			return [ 'success' => false, 'message' => "Product not found (ID: {$product_id})." ];
+		}
+
+		$product_title = $product->get_name();
+		$image_url     = (string) get_the_post_thumbnail_url( $product_id, 'full' );
+
+		if ( '' === $image_url || ! str_starts_with( $image_url, 'https://' ) ) {
+			return [ 'success' => false, 'message' => 'Product image is missing or not accessible via HTTPS.' ];
+		}
+
+		$image_url = self::encode_image_url( $image_url );
+
+		$ext = strtolower( pathinfo( strtok( $image_url, '?' ), PATHINFO_EXTENSION ) );
+		if ( in_array( $ext, [ 'webp', 'gif', 'svg', 'avif', 'bmp', 'tiff', 'tif' ], true ) ) {
+			return [ 'success' => false, 'message' => "Image is {$ext} format. Meta requires JPEG or PNG." ];
+		}
+
+		$caption = SASP_Products::build_caption( $product, $platform );
+
+		if ( 'facebook' === $platform ) {
+			$result = SASP_Meta_API::post_to_facebook( $product_id, $image_url, $caption );
+		} else {
+			$result = SASP_Meta_API::post_to_instagram( $product_id, $image_url, $caption );
+		}
+
+		SASP_Logger::add(
+			$product_id,
+			$product_title,
+			$platform,
+			$result['success'] ? 'success' : 'failed',
+			'[Retry] ' . $result['message']
+		);
+
+		return $result;
+	}
+
+	/**
 	 * @return array<string, array{success: bool, message: string}>
 	 */
 	public static function execute_post(): array {

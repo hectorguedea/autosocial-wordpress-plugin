@@ -194,6 +194,41 @@
 		);
 	});
 
+	// ── Retry failed post from logs ───────────────────────────────────────────
+
+	$('.sasp-logs-table').on('click', '.sasp-retry-btn', function () {
+		var $btn      = $(this);
+		var productId = $btn.data('product-id');
+		var platform  = $btn.data('platform');
+		var $result   = $btn.siblings('.sasp-retry-result');
+
+		if (!window.confirm(s.confirm_retry)) {
+			return;
+		}
+
+		$btn.prop('disabled', true).text(s.posting);
+		$result.hide();
+
+		$.post(sasp_ajax.ajax_url, {
+			action:     'sasp_retry_post',
+			nonce:      sasp_ajax.nonce,
+			product_id: productId,
+			platform:   platform
+		})
+		.done(function (res) {
+			setInlineResult($result, res.data, res.success);
+			if (res.success) {
+				$btn.hide();
+			} else {
+				$btn.prop('disabled', false).text(s.retry);
+			}
+		})
+		.fail(function () {
+			setInlineResult($result, s.conn_error, false);
+			$btn.prop('disabled', false).text(s.retry);
+		});
+	});
+
 	// ── Dismiss setup checklist ───────────────────────────────────────────────
 
 	$('#sasp-dismiss-checklist').on('click', function () {

@@ -205,6 +205,21 @@
 .sasp-logs-table .column-product  { width: 200px; }
 .sasp-logs-table .column-platform { width: 110px; }
 .sasp-logs-table .column-status   { width: 100px; }
+.sasp-logs-table .column-actions  { width: 90px; }
+
+.sasp-log-actions {
+	white-space: nowrap;
+}
+
+.sasp-retry-result {
+	display: block;
+	margin-top: 4px;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.sasp-retry-result.sasp-ok   { color: #065f46; }
+.sasp-retry-result.sasp-fail { color: #991b1b; }
 
 .sasp-logs-table td {
 	vertical-align: top;
