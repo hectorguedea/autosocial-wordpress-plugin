@@ -36,13 +36,14 @@ class SASP_Meta_API {
 		}
 
 		// With a Page Access Token, "me" resolves to the page itself.
-		// /me/feed works; /{page_id}/feed returns error 100-33 in the New Pages Experience.
-		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/me/feed';
+		// /me/photos posts a photo with caption to the page timeline.
+		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/me/photos';
 
 		$response = wp_remote_post( $endpoint, [
 			'timeout' => 30,
 			'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
 			'body'    => [
+				'url'     => $image_url,
 				'message' => $caption,
 			],
 		] );
