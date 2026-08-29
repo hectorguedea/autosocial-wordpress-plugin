@@ -42,7 +42,7 @@ class SASP_Meta_API {
 			'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
 			'body'    => [
 				'url'     => $image_url,
-				'caption' => $caption,
+				'message' => $caption,
 			],
 		] );
 
