@@ -35,14 +35,16 @@ class SASP_Meta_API {
 			return self::err( 'Facebook Page ID or Access Token is not configured.' );
 		}
 
-		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/' . $page_id . '/photos';
+		// /{page_id}/photos requires publish_actions (deprecated) on apps without App Review.
+		// /{page_id}/feed works with pages_manage_posts and is Meta's recommended approach.
+		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/' . $page_id . '/feed';
 
 		$response = wp_remote_post( $endpoint, [
 			'timeout' => 30,
 			'headers' => [ 'Authorization' => 'Bearer ' . $access_token ],
 			'body'    => [
-				'url'     => $image_url,
 				'message' => $caption,
+				'link'    => $image_url,
 			],
 		] );
 
