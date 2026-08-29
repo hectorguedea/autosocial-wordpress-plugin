@@ -35,9 +35,9 @@ class SASP_Meta_API {
 			return self::err( 'Facebook Page ID or Access Token is not configured.' );
 		}
 
-		// /{page_id}/photos requires publish_actions (deprecated) on apps without App Review.
-		// /{page_id}/feed works with pages_manage_posts and is Meta's recommended approach.
-		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/' . $page_id . '/feed';
+		// With a Page Access Token, "me" resolves to the page itself.
+		// /me/feed works; /{page_id}/feed returns error 100-33 in the New Pages Experience.
+		$endpoint = self::GRAPH_BASE . self::GRAPH_VERSION . '/me/feed';
 
 		$response = wp_remote_post( $endpoint, [
 			'timeout' => 30,
